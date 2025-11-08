@@ -100,4 +100,21 @@ jobs:
             git push
             echo "Pushed!"
           fi
+
+                - name: Upload to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: ${{ secrets.FTP_PORT }}
+          protocol: ftp
+          local-dir: ./                 # Upload from repo root
+          server-dir: /public_html/arnavitv/hp/sony/   # Folder on Hostinger
+          exclude: |
+            **/.git*
+            **/.github*
+            **/node_modules/**
+            **/README.md
+
           
