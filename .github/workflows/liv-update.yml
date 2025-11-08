@@ -1,8 +1,8 @@
-name: Update SonyLIV hdnea Cookies Update 
+name: Update SonyLIV hdnea Cookies Update  
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   
+    - cron: '0 */2 * * *'   # Runs every 2 hours
   workflow_dispatch:
 
 jobs:
@@ -30,10 +30,8 @@ jobs:
             -H 'Connection: Orginal' \
             "$API_URL")
 
-          # Save for debugging
           echo "$RESPONSE" > api_response.json
 
-          # Extract videoURL
           VIDEO_URL=$(echo "$RESPONSE" | grep -o '"videoURL":"[^"]*' | cut -d'"' -f4 | head -1)
           if [ -z "$VIDEO_URL" ]; then
             echo "videoURL not found!"
@@ -43,16 +41,13 @@ jobs:
 
           echo "Found videoURL: $VIDEO_URL"
 
-          # Download .mpd file
           MPD_CONTENT=$(curl -s -L \
             -H 'User-Agent: Mozilla/5.0 (Linux; Android 14; 22101316UP) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36' \
             -H 'Referer: https://www.sonyliv.com/' \
             "$VIDEO_URL")
 
-          # Extract hdnea
           HDNEA=$(echo "$MPD_CONTENT" | grep -o 'hdnea=[^&" ]*' | head -1)
           if [ -z "$HDNEA" ]; then
-            # Fallback: extract from videoURL itself
             HDNEA=$(echo "$VIDEO_URL" | grep -o 'hdnea=[^&" ]*')
           fi
 
@@ -65,8 +60,6 @@ jobs:
 
           echo "Extracted hdnea: $HDNEA"
           echo "HDNEA=$HDNEA" >> $GITHUB_OUTPUT
-
-          # Save hdnea cookie in liv.txt
           echo "$HDNEA" > liv.txt
           echo "Saved hdnea to liv.txt"
 
@@ -74,18 +67,12 @@ jobs:
         run: |
           HDNEA="${{ steps.fetch_hdnea.outputs.HDNEA }}"
           FILE="Slivtv.json"
-
           if [ ! -f "$FILE" ]; then
             echo "$FILE not found!"
             exit 1
           fi
-
-          # Backup
           cp "$FILE" "$FILE.bak"
-
-          # Replace hdnea in all links
           sed -i "s|hdnea=[^&\"' ]*|${HDNEA}|g" "$FILE"
-
           echo "Updated $FILE with new hdnea"
 
       - name: Commit & Push
@@ -101,7 +88,7 @@ jobs:
             echo "Pushed!"
           fi
 
-                - name: Upload to Hostinger via FTP
+      - name: Upload to Hostinger via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
@@ -109,12 +96,10 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           port: ${{ secrets.FTP_PORT }}
           protocol: ftp
-          local-dir: ./                 # Upload from repo root
-          server-dir: /public_html/arnavitv/hp/sony/   # Folder on Hostinger
+          local-dir: ./                 # Upload from repository root
+          server-dir: /public_html/arnavitv/hp/sony/   # Hostinger folder path
           exclude: |
             **/.git*
             **/.github*
             **/node_modules/**
             **/README.md
-
-          
