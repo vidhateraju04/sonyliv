@@ -1,103 +1,160 @@
-name: Update SonyLIV hdnea Cookies Update 
+name: Auto Update Sony M3U Tokens
+permissions:
+  contents: write
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   
+    - cron: '0 */4 * * *'  # every 11 hours
   workflow_dispatch:
 
 jobs:
-  update:
+  update-sony:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
-      - name: Fetch hdnea using curl (Browser Simulation)
-        id: fetch_hdnea
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Update sony.m3u tokens
         run: |
-          API_URL="https://apiv4.sonyliv.com/AGL/4.7/A/ENG/MWEB/IN/BR/CONTENT/VIDEOURL/VOD/1000050157"
+          python - <<'PY'
+          import re, requests, os, time
+          from datetime import datetime
 
-          echo "Fetching API with browser headers..."
-          RESPONSE=$(curl -s -L \
-            -H 'User-Agent: Mozilla/5.0 (Linux; Android 14; 22101316UP) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36' \
-            -H 'Accept: application/json, text/plain, */*' \
-            -H 'Accept-Language: en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7' \
-            -H 'Referer: https://www.sonyliv.com/' \
-            -H 'Origin: https://www.sonyliv.com' \
-            -H 'Connection: Orginal' \
-            "$API_URL")
+          API_URL = "https://livetv-cb7.pages.dev/Slivplaylist"
+          LOCAL_FILE = "sony.m3u"
 
-          # Save for debugging
-          echo "$RESPONSE" > api_response.json
+          # 🔹 Android-style headers to bypass Access Denied
+          headers = {
+              "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; Pixel 4 Build/PQ3A.190801.002)",
+              "Host": "livetv-cb7.pages.dev",
+              "Connection": "Keep-Alive",
+              "Accept-Encoding": "gzip",
+          }
 
-          # Extract videoURL
-          VIDEO_URL=$(echo "$RESPONSE" | grep -o '"videoURL":"[^"]*' | cut -d'"' -f4 | head -1)
-          if [ -z "$VIDEO_URL" ]; then
-            echo "videoURL not found!"
-            cat api_response.json
-            exit 1
-          fi
+          def fetch_playlist():
+              for attempt in range(2):
+                  try:
+                      print(f"🔄 Fetching latest playlist (attempt {attempt+1})...")
+                      resp = requests.get(API_URL, headers=headers, timeout=30)
+                      print(f"✅ HTTP {resp.status_code}, bytes: {len(resp.content)}")
+                      preview = resp.text.splitlines()[:5]
+                      print("🔍 Preview:", preview)
+                      if resp.status_code == 200 and "#EXTM3U" in resp.text:
+                          return resp.text
+                  except Exception as e:
+                      print(f"⚠️ Fetch error: {e}")
+                  time.sleep(2)
+              print("❌ Failed to fetch valid playlist after retries.")
+              exit(1)
 
-          echo "Found videoURL: $VIDEO_URL"
+          new_data = fetch_playlist()
 
-          # Download .mpd file
-          MPD_CONTENT=$(curl -s -L \
-            -H 'User-Agent: Mozilla/5.0 (Linux; Android 14; 22101316UP) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36' \
-            -H 'Referer: https://www.sonyliv.com/' \
-            "$VIDEO_URL")
+          def parse_m3u(content):
+              entries = []
+              lines = content.splitlines()
+              for i, line in enumerate(lines):
+                  if line.startswith("#EXTINF"):
+                      header = line.strip()
+                      if i + 1 < len(lines):
+                          url = lines[i + 1].strip()
+                          tvg_id = re.search(r'tvg-id="([^"]+)"', header)
+                          tvg_name = re.search(r'tvg-name="([^"]+)"', header)
+                          raw_name = tvg_name.group(1) if tvg_name else ""
+                          norm_name = raw_name.lower().replace(" ", "").replace("-", "").replace("_", "")
+                          entries.append({
+                              "id": (tvg_id.group(1).lower() if tvg_id else ""),
+                              "name": norm_name,
+                              "raw_name": raw_name,
+                              "header": header,
+                              "url": url
+                          })
+              return entries
 
-          # Extract hdnea
-          HDNEA=$(echo "$MPD_CONTENT" | grep -o 'hdnea=[^&" ]*' | head -1)
-          if [ -z "$HDNEA" ]; then
-            # Fallback: extract from videoURL itself
-            HDNEA=$(echo "$VIDEO_URL" | grep -o 'hdnea=[^&" ]*')
-          fi
+          new_entries = parse_m3u(new_data)
+          sony_new = [e for e in new_entries if "sony" in e["id"] or "sony" in e["name"]]
+          print(f"✅ Found {len(sony_new)} Sony-related channels.")
 
-          if [ -z "$HDNEA" ]; then
-            echo "hdnea not found!"
-            echo "MPD Sample:"
-            echo "$MPD_CONTENT" | head -20
-            exit 1
-          fi
+          if not sony_new:
+              print("⚠️ No Sony-related channels found — skipping update.")
+              exit(0)
 
-          echo "Extracted hdnea: $HDNEA"
-          echo "HDNEA=$HDNEA" >> $GITHUB_OUTPUT
+          if not os.path.exists(LOCAL_FILE):
+              print("📄 sony.m3u not found — creating new file.")
+              lines = ["#EXTM3U", f"# Created: {datetime.utcnow().isoformat()} UTC", ""]
+              for e in sony_new:
+                  lines += [e["header"], e["url"]]
+              with open(LOCAL_FILE, "w", encoding="utf-8") as f:
+                  f.write("\n".join(lines))
+              print("✅ Created new sony.m3u file.")
+              exit(0)
 
-          # Save hdnea cookie in liv.txt
-          echo "$HDNEA" > liv.txt
-          echo "Saved hdnea to liv.txt"
+          with open(LOCAL_FILE, "r", encoding="utf-8") as f:
+              old_data = f.read()
+          old_entries = parse_m3u(old_data)
 
-      - name: Update Slivtv.json
-        run: |
-          HDNEA="${{ steps.fetch_hdnea.outputs.HDNEA }}"
-          FILE="Slivtv.json"
+          updated_lines = ["#EXTM3U", f"# Updated: {datetime.utcnow().isoformat()} UTC", ""]
+          updated_count = 0
+          added_count = 0
 
-          if [ ! -f "$FILE" ]; then
-            echo "$FILE not found!"
-            exit 1
-          fi
+          def find_match(old):
+              for new in sony_new:
+                  if (old["id"] and new["id"] and old["id"] == new["id"]):
+                      return new
+                  if old["name"] and new["name"]:
+                      if old["name"] == new["name"]:
+                          return new
+                      if old["name"] in new["name"] or new["name"] in old["name"]:
+                          return new
+              return None
 
-          # Backup
-          cp "$FILE" "$FILE.bak"
+          for old in old_entries:
+              match = find_match(old)
+              if match:
+                  if match["url"].strip() != old["url"].strip():
+                      updated_count += 1
+                      print(f"🔁 Updated: {old['raw_name']}")
+                  updated_lines.append(match["header"])
+                  updated_lines.append(match["url"])
+              else:
+                  updated_lines.append(old["header"])
+                  updated_lines.append(old["url"])
 
-          # Replace hdnea in all links
-          sed -i "s|hdnea=[^&\"' ]*|${HDNEA}|g" "$FILE"
+          old_names = {o["name"] for o in old_entries}
+          for new in sony_new:
+              if new["name"] not in old_names:
+                  updated_lines.append(new["header"])
+                  updated_lines.append(new["url"])
+                  added_count += 1
+                  print(f"🆕 Added: {new['raw_name']}")
 
-          echo "Updated $FILE with new hdnea"
+          with open(LOCAL_FILE, "w", encoding="utf-8") as f:
+              f.write("\n".join(updated_lines))
 
-      - name: Commit & Push
+          print(f"🎉 sony.m3u updated: {updated_count} updated, {added_count} added.")
+          PY
+
+      - name: Commit and push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Slivtv.json liv.txt
+
+          git add sony.m3u
           if git diff --staged --quiet; then
-            echo "No changes"
+            echo "✅ No changes to commit"
           else
-            git commit -m "Auto-update hdnea from SonyLIV (curl)"
-            git push
-            echo "Pushed!"
+            git commit -m "🔄 Auto-update Sony M3U tokens ($(date -u)) [skip ci] [skip actions]"
+            git push origin HEAD:${{ github.ref }}
+            echo "✅ sony.m3u updated and pushed successfully."
           fi
-          
