@@ -1,8 +1,8 @@
-name: Update SonyLIV hdnea Cookies Update
+name: Update SonyLIV hdnea Cookies Update 
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Runs every 2 hours
+    - cron: '0 */2 * * *'   
   workflow_dispatch:
 
 jobs:
@@ -27,40 +27,48 @@ jobs:
             -H 'Accept-Language: en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7' \
             -H 'Referer: https://www.sonyliv.com/' \
             -H 'Origin: https://www.sonyliv.com' \
+            -H 'Connection: Orginal' \
             "$API_URL")
 
+          # Save for debugging
           echo "$RESPONSE" > api_response.json
 
+          # Extract videoURL
           VIDEO_URL=$(echo "$RESPONSE" | grep -o '"videoURL":"[^"]*' | cut -d'"' -f4 | head -1)
           if [ -z "$VIDEO_URL" ]; then
-            echo "❌ videoURL not found!"
+            echo "videoURL not found!"
             cat api_response.json
             exit 1
           fi
 
-          echo "✅ Found videoURL: $VIDEO_URL"
+          echo "Found videoURL: $VIDEO_URL"
 
+          # Download .mpd file
           MPD_CONTENT=$(curl -s -L \
             -H 'User-Agent: Mozilla/5.0 (Linux; Android 14; 22101316UP) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36' \
             -H 'Referer: https://www.sonyliv.com/' \
             "$VIDEO_URL")
 
+          # Extract hdnea
           HDNEA=$(echo "$MPD_CONTENT" | grep -o 'hdnea=[^&" ]*' | head -1)
           if [ -z "$HDNEA" ]; then
+            # Fallback: extract from videoURL itself
             HDNEA=$(echo "$VIDEO_URL" | grep -o 'hdnea=[^&" ]*')
           fi
 
           if [ -z "$HDNEA" ]; then
-            echo "❌ hdnea not found!"
+            echo "hdnea not found!"
+            echo "MPD Sample:"
             echo "$MPD_CONTENT" | head -20
             exit 1
           fi
 
-          echo "✅ Extracted hdnea: $HDNEA"
+          echo "Extracted hdnea: $HDNEA"
           echo "HDNEA=$HDNEA" >> $GITHUB_OUTPUT
 
+          # Save hdnea cookie in liv.txt
           echo "$HDNEA" > liv.txt
-          echo "✅ Saved hdnea to liv.txt"
+          echo "Saved hdnea to liv.txt"
 
       - name: Update Slivtv.json
         run: |
@@ -68,23 +76,28 @@ jobs:
           FILE="Slivtv.json"
 
           if [ ! -f "$FILE" ]; then
-            echo "❌ $FILE not found!"
+            echo "$FILE not found!"
             exit 1
           fi
 
+          # Backup
           cp "$FILE" "$FILE.bak"
-          sed -i "s|hdnea=[^&\"' ]*|${HDNEA}|g" "$FILE"
-          echo "✅ Updated $FILE with new hdnea"
 
-      - name: Commit & Push Changes
+          # Replace hdnea in all links
+          sed -i "s|hdnea=[^&\"' ]*|${HDNEA}|g" "$FILE"
+
+          echo "Updated $FILE with new hdnea"
+
+      - name: Commit & Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Slivtv.json liv.txt
           if git diff --staged --quiet; then
-            echo "No changes to commit"
+            echo "No changes"
           else
             git commit -m "Auto-update hdnea from SonyLIV (curl)"
             git push
-            echo "✅ Pushed updates successfully"
+            echo "Pushed!"
           fi
+          
