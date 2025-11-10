@@ -1,74 +1,160 @@
-name: Update SonyLIV hdnea and Upload to Hostinger
+name: Auto Update Sony M3U Tokens
+permissions:
+  contents: write
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Runs every 2 hours
+    - cron: '0 */4 * * *'  # every 11 hours
   workflow_dispatch:
 
 jobs:
-  update:
+  update-sony:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
-      - name: Update Slivtv.json with current UTC time
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Update sony.m3u tokens
         run: |
-          TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
-          cat > Slivtv.json <<EOF
-{
-  "updated": "$TIME",
-  "source": "SonyLIV",
-  "playlist": "#EXTM3U
-# Created: $TIME UTC
+          python - <<'PY'
+          import re, requests, os, time
+          from datetime import datetime
 
-#EXTINF:-1 tvg-id=\"2\" tvg-name=\"Sony SAB SD\" tvg-language=\"Hindi\" tvg-logo=\"https://i.ibb.co/svHcHWBz/x.jpg\" group-title=\"SONYLIV\" group-logo=\"https://www.sonypicturesnetworks.com/images/logos/Sony_LIV.png\", Sony SAB SD
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20SAB%20SD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysethd\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_HD.png\" group-title=\"Entertainment\",SET HD
-https://livetv-cb7.pages.dev/Sonyliv?channel=SET%20HD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysabhd\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_SAB_HD.png\" group-title=\"Entertainment\",Sony SAB HD
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20SAB%20HD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonypal\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Pal.png\" group-title=\"Entertainment\",Sony PAL
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20PAL&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonyyay\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Yay_Hindi.png\" group-title=\"Kids\",Sony YAY
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20YAY&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonymarathi\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Marathi_SD.png\" group-title=\"Marathi\",Sony Marathii
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Marathii&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonyaath\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_aath.png\" group-title=\"Bengali\",Sony AATH
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20AATH&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonymaxhd\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Max_HD.png\" group-title=\"Movies\",Sony MAX HD
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20MAX%20HD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonymax\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/SET_MAX.png\" group-title=\"Movies\",Sony MAX
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20MAX&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonymax2\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_MAX2.png\" group-title=\"Movies\",Sony MAX 2
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20MAX%202&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonywah\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Wah.png\" group-title=\"Movies\",Sony WAH
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20WAH&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonypixhd\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_Pix_HD.png\" group-title=\"Movies\",Sony PIX HD
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20PIX%20HD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonybbcearthhd\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Sony_BBC_Earth_HD.png\" group-title=\"Infotainment\",Sony BBC Earth HD
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20BBC%20Earth%20HD&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysportsten1\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_1.png\" group-title=\"Sports\",Sony Sports TEN 1
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Sports%20TEN%201&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysportsten2\" tvg-logo=\"https://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_2.png\" group-title=\"Sports\",Sony Sports TEN 2
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Sports%20TEN%202&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysportsten3\" tvg-logo=\"http://jiotv.catchup.cdn.jio.com/dare_images/images/Ten_3.png\" group-title=\"Sports\",Sony Sports TEN 3
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Sports%20TEN%203&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysportsten4\" tvg-logo=\"https://www.sonypicturesnetworks.com/images/logos/SONY_SportsTen4_SD_Logo_CLR.png\" group-title=\"Sports\",Sony Sports TEN 4
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Sports%20TEN%204&token=Arg6u&type=.m3u8
-#EXTINF:-1 tvg-id=\"sonysportsten5\" tvg-logo=\"https://www.sonypicturesnetworks.com/images/logos/SONY_SportsTen5_SD_Logo_CLR.png\" group-title=\"Sports\",Sony Sports TEN 5
-https://livetv-cb7.pages.dev/Sonyliv?channel=Sony%20Sports%20TEN%205&token=Arg6u&type=.m3u8"
-}
-EOF
+          API_URL = "https://livetv-cb7.pages.dev/Slivplaylist"
+          LOCAL_FILE = "sony.m3u"
 
-      - name: Commit and push changes
+          # 🔹 Android-style headers to bypass Access Denied
+          headers = {
+              "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; Pixel 4 Build/PQ3A.190801.002)",
+              "Host": "livetv-cb7.pages.dev",
+              "Connection": "Keep-Alive",
+              "Accept-Encoding": "gzip",
+          }
+
+          def fetch_playlist():
+              for attempt in range(2):
+                  try:
+                      print(f"🔄 Fetching latest playlist (attempt {attempt+1})...")
+                      resp = requests.get(API_URL, headers=headers, timeout=30)
+                      print(f"✅ HTTP {resp.status_code}, bytes: {len(resp.content)}")
+                      preview = resp.text.splitlines()[:5]
+                      print("🔍 Preview:", preview)
+                      if resp.status_code == 200 and "#EXTM3U" in resp.text:
+                          return resp.text
+                  except Exception as e:
+                      print(f"⚠️ Fetch error: {e}")
+                  time.sleep(2)
+              print("❌ Failed to fetch valid playlist after retries.")
+              exit(1)
+
+          new_data = fetch_playlist()
+
+          def parse_m3u(content):
+              entries = []
+              lines = content.splitlines()
+              for i, line in enumerate(lines):
+                  if line.startswith("#EXTINF"):
+                      header = line.strip()
+                      if i + 1 < len(lines):
+                          url = lines[i + 1].strip()
+                          tvg_id = re.search(r'tvg-id="([^"]+)"', header)
+                          tvg_name = re.search(r'tvg-name="([^"]+)"', header)
+                          raw_name = tvg_name.group(1) if tvg_name else ""
+                          norm_name = raw_name.lower().replace(" ", "").replace("-", "").replace("_", "")
+                          entries.append({
+                              "id": (tvg_id.group(1).lower() if tvg_id else ""),
+                              "name": norm_name,
+                              "raw_name": raw_name,
+                              "header": header,
+                              "url": url
+                          })
+              return entries
+
+          new_entries = parse_m3u(new_data)
+          sony_new = [e for e in new_entries if "sony" in e["id"] or "sony" in e["name"]]
+          print(f"✅ Found {len(sony_new)} Sony-related channels.")
+
+          if not sony_new:
+              print("⚠️ No Sony-related channels found — skipping update.")
+              exit(0)
+
+          if not os.path.exists(LOCAL_FILE):
+              print("📄 sony.m3u not found — creating new file.")
+              lines = ["#EXTM3U", f"# Created: {datetime.utcnow().isoformat()} UTC", ""]
+              for e in sony_new:
+                  lines += [e["header"], e["url"]]
+              with open(LOCAL_FILE, "w", encoding="utf-8") as f:
+                  f.write("\n".join(lines))
+              print("✅ Created new sony.m3u file.")
+              exit(0)
+
+          with open(LOCAL_FILE, "r", encoding="utf-8") as f:
+              old_data = f.read()
+          old_entries = parse_m3u(old_data)
+
+          updated_lines = ["#EXTM3U", f"# Updated: {datetime.utcnow().isoformat()} UTC", ""]
+          updated_count = 0
+          added_count = 0
+
+          def find_match(old):
+              for new in sony_new:
+                  if (old["id"] and new["id"] and old["id"] == new["id"]):
+                      return new
+                  if old["name"] and new["name"]:
+                      if old["name"] == new["name"]:
+                          return new
+                      if old["name"] in new["name"] or new["name"] in old["name"]:
+                          return new
+              return None
+
+          for old in old_entries:
+              match = find_match(old)
+              if match:
+                  if match["url"].strip() != old["url"].strip():
+                      updated_count += 1
+                      print(f"🔁 Updated: {old['raw_name']}")
+                  updated_lines.append(match["header"])
+                  updated_lines.append(match["url"])
+              else:
+                  updated_lines.append(old["header"])
+                  updated_lines.append(old["url"])
+
+          old_names = {o["name"] for o in old_entries}
+          for new in sony_new:
+              if new["name"] not in old_names:
+                  updated_lines.append(new["header"])
+                  updated_lines.append(new["url"])
+                  added_count += 1
+                  print(f"🆕 Added: {new['raw_name']}")
+
+          with open(LOCAL_FILE, "w", encoding="utf-8") as f:
+              f.write("\n".join(updated_lines))
+
+          print(f"🎉 sony.m3u updated: {updated_count} updated, {added_count} added.")
+          PY
+
+      - name: Commit and push if changed
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add Slivtv.json
-          git commit -m "🔄 Auto update Slivtv.json - $TIME" || echo "No changes to commit"
-          git push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          git add sony.m3u
+          if git diff --staged --quiet; then
+            echo "✅ No changes to commit"
+          else
+            git commit -m "🔄 Auto-update Sony M3U tokens ($(date -u)) [skip ci] [skip actions]"
+            git push origin HEAD:${{ github.ref }}
+            echo "✅ sony.m3u updated and pushed successfully."
+          fi
