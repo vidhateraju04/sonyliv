@@ -4,7 +4,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # every 11 hours
+    - cron: '0 */4 * * *'  # every 4 hours
   workflow_dispatch:
 
 jobs:
@@ -35,7 +35,6 @@ jobs:
           API_URL = "https://livetv-cb7.pages.dev/Slivplaylist"
           LOCAL_FILE = "sony.m3u"
 
-          # 🔹 Android-style headers to bypass Access Denied
           headers = {
               "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 9; Pixel 4 Build/PQ3A.190801.002)",
               "Host": "livetv-cb7.pages.dev",
@@ -49,14 +48,12 @@ jobs:
                       print(f"🔄 Fetching latest playlist (attempt {attempt+1})...")
                       resp = requests.get(API_URL, headers=headers, timeout=30)
                       print(f"✅ HTTP {resp.status_code}, bytes: {len(resp.content)}")
-                      preview = resp.text.splitlines()[:5]
-                      print("🔍 Preview:", preview)
                       if resp.status_code == 200 and "#EXTM3U" in resp.text:
                           return resp.text
                   except Exception as e:
                       print(f"⚠️ Fetch error: {e}")
                   time.sleep(2)
-              print("❌ Failed to fetch valid playlist after retries.")
+              print("❌ Failed to fetch valid playlist.")
               exit(1)
 
           new_data = fetch_playlist()
@@ -91,7 +88,6 @@ jobs:
               exit(0)
 
           if not os.path.exists(LOCAL_FILE):
-              print("📄 sony.m3u not found — creating new file.")
               lines = ["#EXTM3U", f"# Created: {datetime.utcnow().isoformat()} UTC", ""]
               for e in sony_new:
                   lines += [e["header"], e["url"]]
@@ -158,3 +154,13 @@ jobs:
             git push origin HEAD:${{ github.ref }}
             echo "✅ sony.m3u updated and pushed successfully."
           fi
+
+      - name: Upload to Hostinger via SFTP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 217.21.74.173
+          port: 65002
+          username: u337381851
+          key: ${{ secrets.HOSTINGER_SSH_KEY }}
+          source: "sony.m3u"
+          target: "domains/arworldcreater.com/public_html/hp/sony/"
