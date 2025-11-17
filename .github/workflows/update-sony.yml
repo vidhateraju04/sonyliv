@@ -87,6 +87,7 @@ jobs:
               print("⚠️ No Sony-related channels found — skipping update.")
               exit(0)
 
+          # Create new sony.m3u if not exists
           if not os.path.exists(LOCAL_FILE):
               lines = ["#EXTM3U", f"# Created: {datetime.utcnow().isoformat()} UTC", ""]
               for e in sony_new:
@@ -96,6 +97,7 @@ jobs:
               print("✅ Created new sony.m3u file.")
               exit(0)
 
+          # Update existing file
           with open(LOCAL_FILE, "r", encoding="utf-8") as f:
               old_data = f.read()
           old_entries = parse_m3u(old_data)
@@ -106,7 +108,7 @@ jobs:
 
           def find_match(old):
               for new in sony_new:
-                  if (old["id"] and new["id"] and old["id"] == new["id"]):
+                  if old["id"] and new["id"] and old["id"] == new["id"]:
                       return new
                   if old["name"] and new["name"]:
                       if old["name"] == new["name"]:
@@ -147,11 +149,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add sony.m3u
+
           if git diff --staged --quiet; then
-            echo "✅ No changes to commit"
+            echo "✅ No changes — nothing to commit"
           else
-            git commit -m "🔄 Auto-update Sony M3U tokens ($(date -u)) [skip ci] [skip actions]"
-            git push origin HEAD:${{ github.ref }}
+            git commit -m "🔄 Auto-update Sony M3U tokens ($(date -u)) [skip ci]"
+            # Pull latest before push, avoid conflicts
+            git pull --rebase --autostash origin main || true
+            git push origin HEAD:main || true
             echo "✅ sony.m3u updated and pushed successfully."
           fi
 
